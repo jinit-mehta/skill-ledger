@@ -1,0 +1,16 @@
+[
+  "wordCount",
+  "skillCount",
+  "claimedYears",
+  "hasGithub",
+  "hasLinks",
+  "educationMentions",
+  "certMentions",
+  "projectCount",
+  "avgProjectAgeMonths",
+  "timelineGapMonths",
+  "contributionCount90d",
+  "contributionStreakWeeks",
+  "institutionRank",
+  "skillConsistency"
+]

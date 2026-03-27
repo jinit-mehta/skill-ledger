@@ -1,0 +1,7 @@
+{
+  "network": "polygon-mumbai",
+  "chainId": 80001,
+  "address": "0xYourContractAddress",
+  "deployedAt": "2026-01-09",
+  "startBlock": 12345678
+}
