@@ -1,28 +1,56 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { ReputationGauge } from "@/components/dashboard/ReputationGauge";
-import { CredentialCard } from "@/components/dashboard/CredentialCard";
-import { SkillBreakdown } from "@/components/dashboard/SkillBreakdown";
-import { StatCard } from "@/components/dashboard/StatCard";
 import { CredentialTimeline } from "@/components/dashboard/CredentialTimeline";
-import { CardSkeleton, StatSkeleton, GaugeSkeleton } from "@/components/dashboard/Skeleton";
+import { StatCard } from "@/components/dashboard/StatCard";
+import { StatSkeleton, GaugeSkeleton, CardSkeleton } from "@/components/dashboard/Skeleton";
 import { Award, Shield, FileText, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-import { uploadResumePdf, scoreResume } from "@/lib/backend";
+import { uploadResumePdf, scoreResume, getChainReputation, getMyCredentials } from "@/lib/backend";
 import { useWallet } from "@/contexts/WalletContext";
 
 export default function LearnerDashboard() {
   const [loading, setLoading] = useState(false);
+  const [initLoading, setInitLoading] = useState(false);
   const [repScore, setRepScore] = useState<number>(0);
   const [resumeFinal, setResumeFinal] = useState<number | null>(null);
   const [fraudProb, setFraudProb] = useState<number | null>(null);
   const [explanation, setExplanation] = useState<any>(null);
   const [features, setFeatures] = useState<any>(null);
+  const [credentials, setCredentials] = useState<any[]>([]);
   const { address } = useWallet();
 
   const fileRef = useRef<HTMLInputElement | null>(null);
+
+  // F2: Auto-load on-chain reputation and credentials on mount when wallet is connected
+  useEffect(() => {
+    if (!address) return;
+
+    async function loadInitialData() {
+      try {
+        setInitLoading(true);
+        const [rep, creds] = await Promise.allSettled([
+          getChainReputation(address!),
+          getMyCredentials(),
+        ]);
+
+        if (rep.status === "fulfilled") {
+          setRepScore(rep.value.score ?? 0);
+        }
+        if (creds.status === "fulfilled") {
+          setCredentials(creds.value.credentials ?? []);
+        }
+      } catch (e) {
+        console.warn("Failed to load initial data:", e);
+      } finally {
+        setInitLoading(false);
+      }
+    }
+
+    loadInitialData();
+  }, [address]);
 
   const onPick = () => fileRef.current?.click();
 
@@ -32,20 +60,17 @@ export default function LearnerDashboard() {
 
       // upload
       const up = await uploadResumePdf(f);
-      setFeatures(up.features); // Capture features for display
+      setFeatures(up.features);
 
       // score via ML
       const sc = await scoreResume(up.resumeId);
       setResumeFinal(sc.final_score);
       setFraudProb(sc.fraud_prob);
-      setExplanation(sc.explanation);
+      setExplanation(sc.explanation); // B4: only set once
 
-      setExplanation(sc.explanation);
-
-      // optional: get on-chain rep for connected wallet
+      // refresh on-chain rep for connected wallet
       if (address) {
-        // backend endpoint reads chain
-        const rep = await (await fetch(`/api/reputation/${address}`)).json();
+        const rep = await getChainReputation(address);
         setRepScore(rep.score ?? 0);
       }
     } catch (e: any) {
@@ -90,13 +115,14 @@ export default function LearnerDashboard() {
 
         {/* Stats Row */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {loading ? (
+          {loading || initLoading ? (
             <>
               <StatSkeleton /><StatSkeleton /><StatSkeleton /><StatSkeleton />
             </>
           ) : (
             <>
-              <StatCard title="Total Credentials" value="—" change={0} icon={Award} index={0} />
+              {/* B5: Real credential count from /me/credentials */}
+              <StatCard title="Total Credentials" value={credentials.length} change={0} icon={Award} index={0} />
               <StatCard title="Fraud Probability" value={fraudProb == null ? "—" : `${Math.round(fraudProb * 100)}%`} change={0} icon={Shield} index={1} />
               <StatCard title="Resume Score" value={resumeFinal == null ? "—" : `${Math.round(resumeFinal)}/100`} change={0} icon={FileText} index={2} />
               <StatCard title="Profile Views" value="—" change={0} icon={TrendingUp} index={3} />
@@ -110,10 +136,10 @@ export default function LearnerDashboard() {
             className="p-6 rounded-2xl bg-card border border-border">
             <h2 className="font-display text-lg font-semibold mb-6">On-chain Reputation</h2>
             <div className="flex flex-col items-center justify-center gap-4">
-              {loading ? <GaugeSkeleton /> : <ReputationGauge score={repScore} maxScore={10000} />}
+              {loading || initLoading ? <GaugeSkeleton /> : <ReputationGauge score={repScore} maxScore={10000} />}
 
               {/* DEMO Helper: Self-Issue Credential */}
-              {repScore === 0 && (
+              {!initLoading && repScore === 0 && (
                 <Button variant="outline" size="sm" onClick={() => window.location.href = "/institution/issue"}>
                   <Award className="w-4 h-4 mr-2" />
                   Boost Score (Demo)
@@ -165,7 +191,7 @@ export default function LearnerDashboard() {
               )}
             </div>
 
-            {/* Detected Skills visual */}
+            {/* Detected Skills */}
             <div className="p-6 rounded-2xl bg-card border border-border">
               <h2 className="font-display text-lg font-semibold mb-4">Detected Skills</h2>
               {!features?.detectedSkills || features.detectedSkills.length === 0 ? (
@@ -183,10 +209,32 @@ export default function LearnerDashboard() {
           </motion.div>
         </div>
 
-        {/* Keep your existing mock sections below if you want */}
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[].map(() => null)}
-        </div>
+        {/* F1: Real Credential Timeline */}
+        {(initLoading || credentials.length > 0) && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="p-6 rounded-2xl bg-card border border-border"
+          >
+            <h2 className="font-display text-lg font-semibold mb-6">My On-chain Credentials</h2>
+            {initLoading ? (
+              <div className="space-y-3">
+                {[1, 2].map(i => <div key={i} className="h-14 bg-secondary/30 rounded-xl animate-pulse" />)}
+              </div>
+            ) : (
+              <CredentialTimeline
+                items={credentials.map((c, i) => ({
+                  id: String(i + 1),
+                  title: `Credential #${c.token_id}`,
+                  issuer: c.issuer,
+                  date: new Date((c.issued_at || 0) * 1000).toLocaleDateString(),
+                  type: "certificate" as const,
+                }))}
+              />
+            )}
+          </motion.div>
+        )}
       </div>
     </DashboardLayout>
   );

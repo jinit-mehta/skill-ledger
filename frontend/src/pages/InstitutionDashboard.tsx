@@ -16,15 +16,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { getInstitutionStats, getInstitutionRecent } from "@/lib/backend";
-
-// Map category IDs to names (mirroring backend logic or just mapping)
-const CATEGORIES: Record<number, string> = {
-  0: "General",
-  1: "Software Development",
-  2: "Blockchain",
-  3: "Data Science",
-  4: "Cybersecurity",
-};
+import { CATEGORIES } from "@/lib/constants";
 
 export default function InstitutionDashboard() {
   const [loading, setLoading] = useState(true);

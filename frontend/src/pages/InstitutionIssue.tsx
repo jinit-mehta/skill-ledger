@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { useWallet } from "@/contexts/WalletContext";
 import { prepareCredentialIssuance } from "@/lib/backend";
 import { getSigner } from "@/lib/wallet";
+import { CATEGORY_OPTIONS } from "@/lib/constants";
 import { ethers } from "ethers";
 import { CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 
@@ -18,13 +19,12 @@ export default function InstitutionIssue() {
 
     const [formData, setFormData] = useState({
         learner: "",
-        credentialHash: "", // In real app, might be computed from file
+        credentialHash: "",
         level: "1",
         category: "0",
     });
 
     const generateRandomHash = () => {
-        // Helper for demo purposes
         const random = ethers.hexlify(ethers.randomBytes(32));
         setFormData((prev) => ({ ...prev, credentialHash: random }));
     };
@@ -62,7 +62,7 @@ export default function InstitutionIssue() {
             await tx.wait();
 
             setSuccess(`Credential issued successfully! Tx: ${tx.hash.slice(0, 10)}...`);
-            setFormData((prev) => ({ ...prev, credentialHash: "" })); // Reset hash
+            setFormData((prev) => ({ ...prev, credentialHash: "" }));
         } catch (err: any) {
             console.error(err);
             setError(err.message || "Failed to issue credential");
@@ -118,7 +118,7 @@ export default function InstitutionIssue() {
 
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <Label htmlFor="level">Skill Level (1-100)</Label>
+                                <Label htmlFor="level">Skill Level (1–100)</Label>
                                 <Input
                                     id="level"
                                     type="number"
@@ -130,16 +130,20 @@ export default function InstitutionIssue() {
                                 />
                             </div>
 
+                            {/* B3/F5: Replace free-text number with named dropdown */}
                             <div className="space-y-2">
-                                <Label htmlFor="category">Category ID</Label>
-                                <Input
+                                <Label htmlFor="category">Category</Label>
+                                <select
                                     id="category"
-                                    type="number"
-                                    min="0"
                                     value={formData.category}
                                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                                     required
-                                />
+                                >
+                                    {CATEGORY_OPTIONS.map(({ id, name }) => (
+                                        <option key={id} value={id}>{name}</option>
+                                    ))}
+                                </select>
                             </div>
                         </div>
 

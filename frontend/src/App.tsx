@@ -12,6 +12,11 @@ import NotFound from "./pages/NotFound";
 
 import ComingSoon from "./pages/ComingSoon";
 import InstitutionIssue from "./pages/InstitutionIssue";
+import EmployerHistory from "./pages/EmployerHistory";
+import CourseManagement from "./pages/CourseManagement";
+import LearnerSettings from "./pages/LearnerSettings";
+import InstitutionSettings from "./pages/InstitutionSettings";
+import EmployerSettings from "./pages/EmployerSettings";
 
 const queryClient = new QueryClient();
 
@@ -27,20 +32,20 @@ const App = () => (
 
             {/* Learner Routes */}
             <Route path="/learner" element={<LearnerDashboard />} />
-            <Route path="/learner/settings" element={<ComingSoon title="Learner Settings" userType="learner" />} />
+            <Route path="/learner/settings" element={<LearnerSettings />} />
             <Route path="/learner/*" element={<LearnerDashboard />} />
 
             {/* Institution Routes */}
             <Route path="/institution" element={<InstitutionDashboard />} />
             <Route path="/institution/issue" element={<InstitutionIssue />} />
-            <Route path="/institution/courses" element={<ComingSoon title="Course Management" userType="institution" />} />
-            <Route path="/institution/settings" element={<ComingSoon title="Institution Settings" userType="institution" />} />
+            <Route path="/institution/courses" element={<CourseManagement />} />
+            <Route path="/institution/settings" element={<InstitutionSettings />} />
             <Route path="/institution/*" element={<InstitutionDashboard />} />
 
             {/* Employer Routes */}
             <Route path="/employer" element={<EmployerDashboard />} />
-            <Route path="/employer/history" element={<ComingSoon title="Verification History" userType="employer" />} />
-            <Route path="/employer/settings" element={<ComingSoon title="Employer Settings" userType="employer" />} />
+            <Route path="/employer/history" element={<EmployerHistory />} />
+            <Route path="/employer/settings" element={<EmployerSettings />} />
             <Route path="/employer/*" element={<EmployerDashboard />} />
 
             <Route path="*" element={<NotFound />} />

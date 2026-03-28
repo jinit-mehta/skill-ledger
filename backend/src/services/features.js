@@ -83,7 +83,6 @@ export function extractFeaturesFromResumeText(text) {
     hasGithub,
     hasLinks,
     avgProjectAgeMonths,
-    avgProjectAgeMonths,
     timelineGapMonths,
     detectedSkills: matches
   };

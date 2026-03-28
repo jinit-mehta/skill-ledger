@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useLocation } from "react-router-dom";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
@@ -76,12 +76,13 @@ export default function EmployerDashboard() {
   const location = useLocation();
   const isVerifyPage = location.pathname === "/employer" || location.pathname === "/employer/";
 
-  const handleVerify = async () => {
-    if (!searchQuery) return;
+  const handleVerify = useCallback(async (addressOverride?: string) => {
+    const query = addressOverride ?? searchQuery;
+    if (!query) return;
     setLoading(true);
     try {
       // 1. Fetch reputation (chain data)
-      const repRes = await fetch(`/api/reputation/${searchQuery}`);
+      const repRes = await fetch(`/api/reputation/${query}`);
       let rep = { score: 0 };
       try {
         if (repRes.ok) {
@@ -93,7 +94,7 @@ export default function EmployerDashboard() {
       }
 
       // 2. Fetch indexed credentials (database data)
-      const idxRes = await fetch(`/api/indexed/credentials/${searchQuery}`);
+      const idxRes = await fetch(`/api/indexed/credentials/${query}`);
       let indexed = { credentials: [] };
       try {
         if (idxRes.ok) {
@@ -104,9 +105,10 @@ export default function EmployerDashboard() {
         console.warn("Credentials parse failed", e);
       }
 
-      setVerificationResult({
+      setSearchQuery(query); // keep input in sync if called programmatically
+      const newResult = {
         ...mockVerificationResult,
-        walletAddress: searchQuery,
+        walletAddress: query,
         // Map real data if available, fallback to mock/defaults
         overallScore: rep.score ? Math.min(100, Math.round((rep.score / 10000) * 100)) : 82,
         credentials: (indexed.credentials && indexed.credentials.length > 0)
@@ -118,7 +120,22 @@ export default function EmployerDashboard() {
             type: "certificate" as const,
           }))
           : mockVerificationResult.credentials, // Fallback for demo
-      });
+      };
+
+      setVerificationResult(newResult);
+
+      // Save to History (local storage for FYP scope)
+      const currentHistory = JSON.parse(localStorage.getItem("employer_history") || "[]");
+      const historyEntry = {
+        address: query,
+        score: newResult.overallScore,
+        risk: newResult.fraudRisk,
+        verifiedAt: new Date().toISOString()
+      };
+      
+      // Keep only unique addresses (update latest) and sort newest first
+      const updatedHistory = [historyEntry, ...currentHistory.filter((h: any) => h.address !== query)].slice(0, 50);
+      localStorage.setItem("employer_history", JSON.stringify(updatedHistory));
 
     } catch (e: any) {
       console.error("Verify failed:", e);
@@ -127,7 +144,18 @@ export default function EmployerDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [searchQuery]);
+
+  // B6/F3: Read ?q= param from URL on mount and auto-verify
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const q = params.get("q");
+    if (q && isVerifyPage) {
+      setSearchQuery(q);
+      handleVerify(q);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Handle clicking the upload box
   const handleUploadClick = () => {
@@ -157,11 +185,37 @@ export default function EmployerDashboard() {
             overallScore: Math.round(data.ml.final_score),
             fraudRisk: data.ml.fraud_prob > 0.5 ? "High" : (data.ml.fraud_prob > 0.2 ? "Medium" : "Low"),
             lastUpdated: "Just now",
-            skills: Object.entries(data.features).filter(([k, v]) => k.startsWith('num_') || k.includes('count')).map(([k, v]) => ({
-              name: k.replace('num_', '').replace('_', ' ').toUpperCase(),
-              score: 80, // visual filler
-              weight: 20
-            })),
+            skills: [
+              { name: "SKILLS", score: Math.max(15, Math.round(Math.min(((data.features.num_skills || 0) / 10) * 100, 100))), weight: 30 },
+              { name: "CERTIFICATIONS", score: Math.max(15, Math.round(Math.min(((data.features.num_certifications || 0) / 3) * 100, 100))), weight: 20 },
+              { name: "PROJECTS", score: Math.max(15, Math.round(Math.min(((data.features.num_projects || 0) / 5) * 100, 100))), weight: 25 },
+              { name: "PUBLICATIONS", score: Math.max(15, Math.round(Math.min(((data.features.num_publications || 0) / 2) * 100, 100))), weight: 25 },
+            ],
+            credentials: (() => {
+              const generated = [
+                ...(data.features.detectedSkills?.slice(0, 4).map((skill: string, i: number) => ({
+                  id: `ext-skill-${i}`,
+                  title: `${skill.charAt(0).toUpperCase() + skill.slice(1)} Expertise`,
+                  issuer: "Resume Extraction",
+                  date: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+                  type: "certificate" as const
+                })) || []),
+                ...(data.features.total_experience_years > 0 ? [{
+                  id: "ext-exp",
+                  title: `${data.features.total_experience_years}+ Years Experience`,
+                  issuer: "Professional History",
+                  date: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+                  type: "course" as const
+                }] : [])
+              ];
+              return generated.length > 0 ? generated : [{
+                id: "ext-general",
+                title: "General Professional",
+                issuer: "Resume Extraction",
+                date: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+                type: "course" as const
+              }];
+            })(),
             scoreExplanation: data.ml.explanation.top_drivers.map((d: any) => ({
               factor: d.feature,
               impact: `+${d.impact}`,
@@ -189,8 +243,62 @@ export default function EmployerDashboard() {
 
   // --- Sub-page Rendering (History / Settings) ---
   if (!isVerifyPage) {
+    if (location.pathname.includes("history")) {
+      const historyItems = JSON.parse(localStorage.getItem("employer_history") || "[]");
+      return (
+        <DashboardLayout userType="employer">
+          <div className="space-y-8">
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+              <h1 className="font-display text-2xl sm:text-3xl font-bold mb-1">Verification History</h1>
+              <p className="text-muted-foreground">Recent candidates you have verified</p>
+            </motion.div>
+            
+            <div className="p-6 rounded-2xl bg-card border border-border">
+               {historyItems.length === 0 ? (
+                 <div className="flex flex-col items-center justify-center py-12 text-center">
+                   <Clock className="w-12 h-12 text-muted-foreground mb-4 opacity-20" />
+                   <p className="text-lg font-medium">No verification history yet</p>
+                   <p className="text-sm text-muted-foreground max-w-sm mt-1">Upload a resume or search a wallet address to verify your first candidate.</p>
+                 </div>
+               ) : (
+                 <div className="space-y-4">
+                   {historyItems.map((item: any, i: number) => (
+                     <motion.div 
+                       initial={{ opacity: 0, y: 10 }} 
+                       animate={{ opacity: 1, y: 0 }} 
+                       transition={{ delay: i * 0.05 }}
+                       key={i} 
+                       className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl bg-secondary/30 border border-border gap-4 hover:border-primary/30 transition-colors"
+                     >
+                       <div>
+                         <p className="font-mono text-sm font-medium text-primary">{item.address}</p>
+                         <p className="text-xs text-muted-foreground mt-1">Verified: {new Date(item.verifiedAt).toLocaleString()}</p>
+                       </div>
+                       <div className="flex gap-6 items-center">
+                         <div className="text-right">
+                           <p className="text-xs text-muted-foreground">Score</p>
+                           <p className="font-bold font-display">{item.score}</p>
+                         </div>
+                         <div className="text-right w-16">
+                           <p className="text-xs text-muted-foreground">Risk</p>
+                           <p className={`font-bold text-sm ${item.risk === 'High' ? 'text-red-500' : item.risk === 'Medium' ? 'text-yellow-500' : 'text-success'}`}>{item.risk}</p>
+                         </div>
+                         <Button variant="gradient" size="sm" onClick={() => window.location.href = `/employer?q=${item.address}`}>
+                           <Search className="w-3 h-3 mr-2" />
+                           Review
+                         </Button>
+                       </div>
+                     </motion.div>
+                   ))}
+                 </div>
+               )}
+            </div>
+          </div>
+        </DashboardLayout>
+      );
+    }
+
     let title = "Page Not Found";
-    if (location.pathname.includes("history")) title = "Verification History";
     if (location.pathname.includes("settings")) title = "Employer Settings";
 
     return (
@@ -248,7 +356,7 @@ export default function EmployerDashboard() {
               <Button
                 variant="gradient"
                 className="w-full"
-                onClick={handleVerify}
+                onClick={() => handleVerify()}
                 disabled={loading || !searchQuery}
               >
                 {loading ? (
@@ -399,7 +507,9 @@ export default function EmployerDashboard() {
               <div className="p-6 rounded-2xl bg-card border border-border">
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="font-display text-lg font-semibold">Credential Timeline</h3>
-                  <Button variant="ghost" size="sm"><ExternalLink className="w-4 h-4" /> View on Chain</Button>
+                  <Button variant="ghost" size="sm" onClick={() => window.open(`https://sepolia.etherscan.io/address/${verificationResult?.walletAddress}`, "_blank")}>
+                    <ExternalLink className="w-4 h-4 mr-2" /> View on Chain
+                  </Button>
                 </div>
                 {loading ? <div className="space-y-4" /> : <CredentialTimeline items={verificationResult?.credentials || []} />}
               </div>

@@ -73,3 +73,10 @@ export async function getInstitutionRecent() {
     headers: { ...authHeaders(token) }
   });
 }
+
+export async function getMyCredentials() {
+  const token = getToken();
+  return apiFetch<{ learner: string; credentials: any[] }>("/me/credentials", {
+    headers: { ...authHeaders(token) }
+  });
+}

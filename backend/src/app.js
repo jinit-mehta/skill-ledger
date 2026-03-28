@@ -302,3 +302,14 @@ app.get("/me/scores", requireAuth, async (req, res, next) => {
     next(e);
   }
 });
+
+// F4: Authenticated shortcut — learner's own indexed credentials
+app.get("/me/credentials", requireAuth, async (req, res, next) => {
+  try {
+    const learner = req.user.address.toLowerCase();
+    const credentials = await listCredentialsByLearner(learner);
+    res.json({ learner, credentials });
+  } catch (e) {
+    next(e);
+  }
+});

@@ -54,7 +54,7 @@ export function DashboardLayout({ children, userType }: DashboardLayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
-  const { address, isConnected, connect, isLoading } = useWallet();
+  const { address, isConnected, connect, disconnect, isLoading } = useWallet();
   const links = sidebarLinks[userType];
   const UserIcon = userTypeIcons[userType];
 
@@ -175,6 +175,13 @@ export function DashboardLayout({ children, userType }: DashboardLayoutProps) {
                   </motion.div>
                 )}
               </AnimatePresence>
+              <button
+                onClick={disconnect}
+                title="Disconnect wallet"
+                className="ml-auto p-1.5 rounded-lg hover:bg-sidebar-accent transition-colors flex-shrink-0"
+              >
+                <LogOut className="w-4 h-4 text-muted-foreground" />
+              </button>
             </div>
           ) : (
             <Button
